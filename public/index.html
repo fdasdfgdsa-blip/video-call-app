@@ -3,32 +3,23 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Video Rooms — до 5 чел</title>
-  <link rel="stylesheet" href="style.css">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <title>Video Rooms — demo</title>
+  <link rel="stylesheet" href="style.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
 </head>
 <body class="theme-light">
-  <div class="app">
-    <header class="header">
-      <div class="brand">
+  <div class="container">
+    <header class="top">
+      <div>
         <h1>Video Rooms</h1>
-        <div class="subtitle">Прототип — до 5 участников, камера + экран отдельно</div>
+        <div class="sub">До 5 участников. Камера + экран отдельно. Нажми Join, потом включи камеру/экран.</div>
       </div>
-
-      <div class="header-controls">
-        <label class="theme-label">Тема:
+      <div class="controls-top">
+        <label>Тема:
           <select id="themeSelect">
             <option value="light">Light</option>
             <option value="dark">Dark</option>
             <option value="minecraft">Minecraft</option>
-          </select>
-        </label>
-        <label class="quality-label">Качество:
-          <select id="qualitySelect">
-            <option value="0">Auto</option>
-            <option value="300000">300 kbps</option>
-            <option value="700000">700 kbps</option>
-            <option value="1500000">1500 kbps</option>
           </select>
         </label>
       </div>
@@ -36,50 +27,35 @@
 
     <main class="main">
       <aside class="sidebar">
-        <section class="lobby-panel">
-          <h2>Выбери войс</h2>
-          <div class="rooms">
-            <button class="room-btn" data-room="lobby">Lobby</button>
-            <button class="room-btn" data-room="game">Game</button>
-            <button class="room-btn" data-room="studio">Studio</button>
-            <button class="room-btn" data-room="hangout">Hangout</button>
-          </div>
+        <div class="panel">
+          <h3>Войти в комнату</h3>
+          <input id="roomInput" placeholder="название комнаты (например: lobby)" />
+          <input id="nameInput" placeholder="твоё имя (опционально)" />
+          <button id="joinBtn">Join</button>
+          <div id="roomStatus" class="muted"></div>
+        </div>
 
-          <div class="custom-room">
-            <input id="customRoomInput" placeholder="Имя комнаты" />
-            <button id="joinCustomBtn">Войти</button>
-          </div>
-
-          <div class="name-box">
-            <input id="userNameInput" placeholder="Твоё имя (опционально)" />
-          </div>
-        </section>
-
-        <section class="participants-panel">
+        <div class="panel">
           <h3>Участники</h3>
-          <ul id="participantsList" class="participants-list"></ul>
-        </section>
+          <ul id="participantsList" class="participants"></ul>
+        </div>
       </aside>
 
-      <section id="callArea" class="call-area hidden">
-        <div class="controls">
-          <div class="left-controls">
-            <button id="toggleCamBtn">Включить камеру</button>
-            <button id="shareScreenBtn">Поделиться экраном</button>
-            <button id="stopScreenBtn" disabled>Остановить экран</button>
-            <button id="leaveBtn">Выйти</button>
-          </div>
-          <div class="status" id="roomTitle">Комната: —</div>
+      <section class="content">
+        <div class="actions">
+          <button id="startCamBtn">Включить камеру</button>
+          <button id="muteBtn" disabled>Откл. микрофон</button>
+          <button id="shareBtn">Поделиться экраном</button>
+          <button id="stopShareBtn" disabled>Остановить экран</button>
+          <button id="leaveBtn">Выйти</button>
         </div>
 
-        <div id="videosGrid" class="videos-grid">
-          <!-- локальная карточка и карточки участников -->
-        </div>
+        <div id="videosContainer" class="videos"></div>
       </section>
     </main>
 
     <footer class="footer">
-      <small>Совет: тестируй в двух браузерах (или одной вкладке + другом устройстве). Для интернета нужен TURN + HTTPS.</small>
+      <small>Тест: открывай два разных браузера или два устройства. Для интернета — используйте HTTPS + TURN.</small>
     </footer>
   </div>
 

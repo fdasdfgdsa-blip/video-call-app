@@ -8,11 +8,12 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-// отдаём статику из public
+// отдаём статику
 app.use(express.static(path.join(__dirname, 'public')));
 
+// Простая логика комнат: max 5 участников
 io.on('connection', socket => {
-  console.log('connect', socket.id);
+  console.log('socket connected', socket.id);
 
   socket.on('join', (roomId, userName) => {
     if (!roomId) return;
@@ -25,9 +26,9 @@ io.on('connection', socket => {
 
     socket.join(roomId);
     socket.roomId = roomId;
-    socket.userName = userName || socket.id;
+    socket.userName = userName || `User-${socket.id.substring(0,6)}`;
 
-    // собираем существующих участников
+    // собрать список существующих участников (id + name)
     const peers = [];
     for (const id of (io.sockets.adapter.rooms.get(roomId) || [])) {
       if (id === socket.id) continue;
@@ -36,25 +37,20 @@ io.on('connection', socket => {
     }
 
     socket.emit('joined', { roomId, you: socket.id, peers });
-
-    // уведомляем остальных
     socket.to(roomId).emit('peer-joined', { id: socket.id, userName: socket.userName });
     console.log(`${socket.userName} joined ${roomId} (now ${count+1})`);
   });
 
-  // сигналинг (peer-to-peer messages)
-  socket.on('offer', data => { io.to(data.to).emit('offer', data); });
+  // Forward signaling messages to specific peer
+  socket.on('offer', data => { // { to, from, sdp }
+    io.to(data.to).emit('offer', data);
+  });
   socket.on('answer', data => { io.to(data.to).emit('answer', data); });
   socket.on('ice-candidate', data => { io.to(data.to).emit('ice-candidate', data); });
 
-  // статусы UI: mute/unmute, screen-on/off
-  socket.on('mute', data => { // data: { to, from, muted }
-    if (data.to) io.to(data.to).emit('peer-muted', data);
-    else if (socket.roomId) socket.to(socket.roomId).emit('peer-muted', data);
-  });
-  socket.on('screen-status', data => { // { to, from, sharing }
-    if (data.to) io.to(data.to).emit('peer-screen', data);
-    else if (socket.roomId) socket.to(socket.roomId).emit('peer-screen', data);
+  // UI statuses (optional)
+  socket.on('peer-mute', data => { // { from, muted }
+    if (socket.roomId) socket.to(socket.roomId).emit('peer-mute', data);
   });
 
   socket.on('disconnecting', () => {
@@ -62,7 +58,9 @@ io.on('connection', socket => {
     if (roomId) socket.to(roomId).emit('peer-left', { id: socket.id, userName: socket.userName });
   });
 
-  socket.on('disconnect', () => { console.log('disconnect', socket.id); });
+  socket.on('disconnect', () => {
+    console.log('socket disconnected', socket.id);
+  });
 });
 
 const PORT = process.env.PORT || 3000;

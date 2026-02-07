@@ -1,7 +1,7 @@
 {
   "name": "video-call-app",
   "version": "1.0.0",
-  "description": "Group video rooms (up to 5) - demo",
+  "description": "Group WebRTC demo up to 5 participants",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
