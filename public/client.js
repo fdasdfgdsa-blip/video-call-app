@@ -1,96 +1,85 @@
-// client.js — исправленная версия с рабочей демонстрацией экрана для всех участников
+// client.js — полностью исправленная версия (демонстрация экрана для всех)
 const socket = io();
 const peers = {};
-const peerStreams = {};
 let localStream = null;
 let screenStream = null;
-let isScreenSharing = false;
+let isSharingScreen = false;
 let roomId = null;
 let localId = null;
 
-// элементы
-const joinBtn = document.getElementById("joinBtn");
+// HTML элементы
 const roomInput = document.getElementById("roomInput");
-const videosContainer = document.getElementById("videosContainer");
+const joinBtn = document.getElementById("joinBtn");
 const startCamBtn = document.getElementById("startCam");
 const shareBtn = document.getElementById("shareScreen");
 const stopShareBtn = document.getElementById("stopShare");
+const videosContainer = document.getElementById("videosContainer");
 
-// конфиг для WebRTC
 const config = {
-  iceServers: [
-    { urls: "stun:stun.l.google.com:19302" }
-  ]
+  iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
 };
 
-// подключение
+// --- Подключение к комнате ---
 joinBtn.onclick = () => {
   const room = roomInput.value.trim();
-  if (!room) return alert("Введите название комнаты");
+  if (!room) return alert("Введите название комнаты!");
   roomId = room;
   socket.emit("join", room);
   joinBtn.disabled = true;
   roomInput.disabled = true;
 };
 
-// старт камеры
+// --- Запуск камеры ---
 startCamBtn.onclick = async () => {
   if (localStream) return;
-  localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-  addVideo(localStream, "Вы");
-  broadcastNewTracks(localStream);
+  try {
+    localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    addVideo(localStream, "Вы");
+    broadcastTracksToAll();
+  } catch (err) {
+    alert("Ошибка камеры: " + err.message);
+  }
 };
 
-// кнопка "поделиться экраном"
+// --- Демонстрация экрана ---
 shareBtn.onclick = async () => {
-  if (isScreenSharing) return;
+  if (isSharingScreen) return;
   try {
     screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
-    isScreenSharing = true;
+    isSharingScreen = true;
     addVideo(screenStream, "Ваш экран");
-    broadcastNewTracks(screenStream, true);
 
-    screenStream.getVideoTracks()[0].onended = () => {
-      stopScreenSharing();
-    };
+    // когда экран закрыт пользователем
+    screenStream.getVideoTracks()[0].onended = stopScreenSharing;
+
+    // пересоздать соединения
+    updatePeersWithScreen();
 
     shareBtn.disabled = true;
     stopShareBtn.disabled = false;
   } catch (err) {
-    console.error("Ошибка при демонстрации:", err);
+    alert("Ошибка при демонстрации: " + err.message);
   }
 };
 
-// кнопка "остановить демонстрацию"
+// --- Остановка демонстрации ---
 stopShareBtn.onclick = () => {
   stopScreenSharing();
 };
 
-function stopScreenSharing() {
-  if (!screenStream) return;
-  screenStream.getTracks().forEach((t) => t.stop());
-  screenStream = null;
-  isScreenSharing = false;
-  shareBtn.disabled = false;
-  stopShareBtn.disabled = true;
-  removeVideo("Ваш экран");
-  removeTrackFromPeers("screen");
-  socket.emit("screen-status", { from: localId, sharing: false });
-}
-
-// подключение нового пользователя
+// --- Реакция на вход в комнату ---
 socket.on("joined", ({ roomId: rid, you, peers: others }) => {
   localId = you;
-  others.forEach(({ id }) => createPeerConnection(id, true));
+  others.forEach(({ id }) => createPeer(id, true));
 });
 
 socket.on("peer-joined", ({ id }) => {
-  createPeerConnection(id, true);
+  createPeer(id, true);
 });
 
-// offer/answer/ice
+// --- Offer/Answer обмен ---
 socket.on("offer", async ({ from, sdp }) => {
-  const pc = createPeerConnection(from, false);
+  const pc = createPeer(from, false);
   await pc.setRemoteDescription(new RTCSessionDescription(sdp));
   const answer = await pc.createAnswer();
   await pc.setLocalDescription(answer);
@@ -107,58 +96,57 @@ socket.on("ice-candidate", ({ from, candidate }) => {
   if (pc && candidate) pc.addIceCandidate(new RTCIceCandidate(candidate));
 });
 
-// отключение
+// --- Отключение участника ---
 socket.on("peer-left", ({ id }) => {
   if (peers[id]) peers[id].close();
   delete peers[id];
   removeVideo(id);
 });
 
-// функция создания соединения
-function createPeerConnection(id, isInitiator) {
+// --- Создание PeerConnection ---
+function createPeer(id, isInitiator) {
   if (peers[id]) return peers[id];
+
   const pc = new RTCPeerConnection(config);
   peers[id] = pc;
 
-  // передача ICE кандидатов
   pc.onicecandidate = (e) => {
-    if (e.candidate)
-      socket.emit("ice-candidate", { to: id, from: localId, candidate: e.candidate });
+    if (e.candidate) socket.emit("ice-candidate", { to: id, from: localId, candidate: e.candidate });
   };
 
-  // получение медиапотоков
   pc.ontrack = (e) => {
-    if (!peerStreams[id]) {
-      peerStreams[id] = new MediaStream();
-      addVideo(peerStreams[id], id);
-    }
-    peerStreams[id].addTrack(e.track);
+    const stream = e.streams[0];
+    addVideo(stream, id);
   };
 
-  // если у нас уже есть камера — добавляем
+  // добавляем свои потоки (камера и экран)
   if (localStream) {
-    localStream.getTracks().forEach((track) => pc.addTrack(track, localStream));
+    localStream.getTracks().forEach((t) => pc.addTrack(t, localStream));
   }
-  // если у нас идёт демонстрация — тоже добавляем
   if (screenStream) {
-    screenStream.getTracks().forEach((track) => pc.addTrack(track, screenStream));
+    screenStream.getTracks().forEach((t) => pc.addTrack(t, screenStream));
   }
 
-  // если мы инициатор, создаём offer
+  // создаём offer если инициатор
   if (isInitiator) {
-    pc.createOffer()
-      .then((offer) => pc.setLocalDescription(offer))
-      .then(() =>
-        socket.emit("offer", { to: id, from: localId, sdp: pc.localDescription })
-      );
+    pc.createOffer().then((offer) => {
+      pc.setLocalDescription(offer);
+      socket.emit("offer", { to: id, from: localId, sdp: pc.localDescription });
+    });
   }
 
   return pc;
 }
 
-// добавление видео на экран
+// --- Добавление видео на экран ---
 function addVideo(stream, label) {
-  removeVideo(label);
+  // если уже есть — обновляем
+  const existing = document.getElementById(label);
+  if (existing) {
+    existing.srcObject = stream;
+    return;
+  }
+
   const video = document.createElement("video");
   video.autoplay = true;
   video.playsInline = true;
@@ -167,9 +155,8 @@ function addVideo(stream, label) {
   video.width = 400;
 
   const div = document.createElement("div");
-  div.className = "video-block";
   const title = document.createElement("p");
-  title.innerText = label;
+  title.textContent = label;
   div.appendChild(title);
   div.appendChild(video);
   videosContainer.appendChild(div);
@@ -180,25 +167,49 @@ function removeVideo(label) {
   if (el && el.parentNode) el.parentNode.remove();
 }
 
-// переслать новые треки всем участникам
-function broadcastNewTracks(stream, isScreen = false) {
+// --- Рассылка своих треков всем участникам ---
+function broadcastTracksToAll() {
   Object.keys(peers).forEach((id) => {
     const pc = peers[id];
-    stream.getTracks().forEach((track) => {
-      pc.addTrack(track, stream);
-    });
+    if (!pc) return;
+    if (localStream) {
+      localStream.getTracks().forEach((t) => pc.addTrack(t, localStream));
+    }
   });
-  if (isScreen) socket.emit("screen-status", { from: localId, sharing: true });
 }
 
-// удалить треки экрана, если экран выключен
-function removeTrackFromPeers(type) {
-  Object.keys(peers).forEach((id) => {
-    const pc = peers[id];
-    pc.getSenders().forEach((sender) => {
-      if (sender.track && sender.track.kind === "video") {
-        sender.replaceTrack(null);
-      }
-    });
+// --- Пересоздать соединения при включении экрана ---
+function updatePeersWithScreen() {
+  Object.keys(peers).forEach(async (id) => {
+    const oldPc = peers[id];
+    try { oldPc.close(); } catch {}
+    delete peers[id];
+
+    // пересоздаём peer
+    const pc = createPeer(id, true);
+    if (screenStream) {
+      screenStream.getTracks().forEach((t) => pc.addTrack(t, screenStream));
+    }
+    if (localStream) {
+      localStream.getTracks().forEach((t) => pc.addTrack(t, localStream));
+    }
+
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    socket.emit("offer", { to: id, from: localId, sdp: pc.localDescription });
   });
+}
+
+// --- Остановка экрана ---
+function stopScreenSharing() {
+  if (!isSharingScreen) return;
+  screenStream.getTracks().forEach((t) => t.stop());
+  screenStream = null;
+  isSharingScreen = false;
+  removeVideo("Ваш экран");
+  shareBtn.disabled = false;
+  stopShareBtn.disabled = true;
+
+  // пересоздать соединения без экрана
+  updatePeersWithScreen();
 }
